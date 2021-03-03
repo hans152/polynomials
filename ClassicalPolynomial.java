@@ -1,5 +1,3 @@
-package polynomial;
-
 /**
  * 
  * @author Andreas Rosowski
