@@ -6,6 +6,7 @@
 public class CirculantPolynomial {
 	private static final long P = 2147483647L;
 	private static final long[] ONE = {1L, 0L};
+	private final long[][] cache = new long[4][2];
 	private long[][] ROOTS;
 	private long[][] INVERSEROOTS;
 	
@@ -18,11 +19,11 @@ public class CirculantPolynomial {
 		}
 		N = 1 << d;
 		long[] omega = {2L, 1L};
-		omega = CirculantPolynomial.power(omega, (CirculantPolynomial.P + 1) >> (d-3));
-		computeRoots(omega, N >> 3, d-3);
+		omega = CirculantPolynomial.power(omega, (CirculantPolynomial.P + 1) >> (d-2));
+		computeRoots(omega, N>>2, d-2);
 		long[][] aTmp = new long[N][2];
-		long[] tmp = {a[0], 0};
-		aTmp[0] = tmp;
+		aTmp[0][0] = a[0];
+		aTmp[0][1] = 0L;
 		for(int i=1;i<a.length;i++) {
 			long[] tmp2 = {a[i], 0};
 			aTmp[N-i] = tmp2;
@@ -32,73 +33,120 @@ public class CirculantPolynomial {
 			long[] tmp2 = {b[i], 0};
 			bTmp[i] = tmp2;
 		}
-		long[][] cTmp = multRec(aTmp, bTmp, 0, N);
+		multRecPre(aTmp, bTmp, N, 0, 0);
 		long[] c = new long[a.length + b.length - 1];
 		for(int i=0;i<c.length;i++) {
-			c[i] = (cTmp[i][0] + CirculantPolynomial.P) % CirculantPolynomial.P;
+			bTmp[i][0] *= (CirculantPolynomial.P + 1) >> (d-2);
+			bTmp[i][0] %= CirculantPolynomial.P;
+			c[i] = (bTmp[i][0] + CirculantPolynomial.P) % CirculantPolynomial.P;
 		}
 		return c;
 	}
 	
-	private long[][] multRec(long[][] a, long[][] b, int D, int N) {
-		if(N <= 8) {
-			return multNaiv(a, b, D, N);
+	private void multRecPre(long[][] a, long[][] b, int N, int la, int lb) {
+		if(N <= 4) {
+			multNaiv(a, b, 0, N, la, lb);
+			return;
 		}
 		int newN = N >> 1;
-		long[][] a1 = new long[newN][2];
-		long[][] a2 = new long[newN][2];
-		long[][] b1 = new long[newN][2];
-		long[][] b2 = new long[newN][2];
-		long[][] M;
-		long[][] c;
+		long[] tmp = new long[2];
+		
+		for(int i=0;i<newN;i++) {
+			tmp[0] = a[la+i+newN][0];
+			tmp[1] = a[la+i+newN][1];
+			a[la+i+newN][0] += a[la+i][0];
+			a[la+i+newN][0] %= CirculantPolynomial.P;
+			a[la+i+newN][1] += a[la+i][1];
+			a[la+i+newN][1] %= CirculantPolynomial.P;
+			a[la+i][0] -= tmp[0];
+			a[la+i][0] %= CirculantPolynomial.P;
+			a[la+i][1] -= tmp[1];
+			a[la+i][1] %= CirculantPolynomial.P;
+			tmp[0] = b[lb+i][0];
+			tmp[1] = b[lb+i][1];
+			b[lb+i][0] += b[lb+i+newN][0];
+			b[lb+i][0] %= CirculantPolynomial.P;
+			b[lb+i][1] += b[lb+i+newN][1];
+			b[lb+i][1] %= CirculantPolynomial.P;
+			b[lb+i+newN][0] = (tmp[0] - b[lb+i+newN][0]) % CirculantPolynomial.P;
+			b[lb+i+newN][1] = (tmp[1] - b[lb+i+newN][1]) % CirculantPolynomial.P;
+		}
+		multRecPre(a, b, newN, la+newN, lb);
+		multRec(a, b, 1, newN, la, lb+newN);
+		
+		for(int i=0;i<newN;i++) {
+			tmp[0] = b[lb+i][0];
+			tmp[1] = b[lb+i][1];
+			b[lb+i][0] += b[lb+i+newN][0];
+			b[lb+i][1] += b[lb+i+newN][1];
+			b[lb+i][0] %= CirculantPolynomial.P;
+			b[lb+i][1] %= CirculantPolynomial.P;
+			b[lb+i+newN][0] = tmp[0] - b[lb+i+newN][0];
+			b[lb+i+newN][1] = tmp[1] - b[lb+i+newN][1];
+			b[lb+i+newN][0] %= CirculantPolynomial.P;
+			b[lb+i+newN][1] %= CirculantPolynomial.P;
+		}
+	}
+	
+	private void multRec(long[][] a, long[][] b, int D, int N, int la, int lb) {
+		if(N <= 4) {
+			multNaiv(a, b, D, N, la, lb);
+			return;
+		}
+		int newN = N >> 1;
 		long[] sqrt = ROOTS[D << 1];
+		long[] tmp = new long[2];
 		
 		for(int i=0;i<newN;i++) {
-			a2[i] = CirculantPolynomial.multiplication(a[i+newN], sqrt);
-			a1[i][0] = (a[i][0] + a2[i][0]) % CirculantPolynomial.P;
-			a1[i][1] = (a[i][1] + a2[i][1]) % CirculantPolynomial.P;
-			b1[i] = CirculantPolynomial.multiplication(b[i], sqrt);
-			b2[i][0] = (b[i+newN][0] + b1[i][0]) % CirculantPolynomial.P;
-			b2[i][1] = (b[i+newN][1] + b1[i][1]) % CirculantPolynomial.P;
+			a[la+i+newN] = CirculantPolynomial.multiplication(a[la+i+newN], sqrt);
+			tmp[0] = a[la+i+newN][0];
+			tmp[1] = a[la+i+newN][1];
+			a[la+i+newN][0] += a[la+i][0];
+			a[la+i+newN][0] %= CirculantPolynomial.P;
+			a[la+i+newN][1] += a[la+i][1];
+			a[la+i+newN][1] %= CirculantPolynomial.P;
+			a[la+i][0] -= tmp[0];
+			a[la+i][0] %= CirculantPolynomial.P;
+			a[la+i][1] -= tmp[1];
+			a[la+i][1] %= CirculantPolynomial.P;
+			b[lb+i] = CirculantPolynomial.multiplication(b[lb+i], sqrt);
+			tmp[0] = b[lb+i][0];
+			tmp[1] = b[lb+i][1];
+			b[lb+i][0] += b[lb+i+newN][0];
+			b[lb+i][0] %= CirculantPolynomial.P;
+			b[lb+i][1] += b[lb+i+newN][1];
+			b[lb+i][1] %= CirculantPolynomial.P;
+			b[lb+i+newN][0] = (tmp[0] - b[lb+i+newN][0]) % CirculantPolynomial.P;
+			b[lb+i+newN][1] = (tmp[1] - b[lb+i+newN][1]) % CirculantPolynomial.P;
 		}
-		M = multRec(a1, b2, D << 1, newN);
-		
-		c = new long[N][2];
-		for(int i=0;i<newN;i++) {
-			c[i] = M[i];
-			a1[i][0] = (a[i][0] - a2[i][0]) % CirculantPolynomial.P;
-			a1[i][1] = (a[i][1] - a2[i][1]) % CirculantPolynomial.P;
-			b2[i][0] = (-b[i+newN][0] + b1[i][0]) % CirculantPolynomial.P;
-			b2[i][1] = (-b[i+newN][1] + b1[i][1]) % CirculantPolynomial.P;
-		}
-		M = multRec(a1, b2, (D << 1) + 1, newN);
+		multRec(a, b, D << 1, newN, la+newN, lb);
+		multRec(a, b, (D << 1) + 1, newN, la, lb+newN);
 		
 		sqrt = INVERSEROOTS[D << 1];
 		for(int i=0;i<newN;i++) {
-			c[i][0] += M[i][0];
-			c[i][0] <<= 30;
-			c[i][0] %= CirculantPolynomial.P;
-			c[i][1] += M[i][1];
-			c[i][1] <<= 30;
-			c[i][1] %= CirculantPolynomial.P;
-			c[i+newN][0] = c[i][0] - M[i][0];
-			c[i+newN][0] %= CirculantPolynomial.P;
-			c[i+newN][1] = c[i][1] - M[i][1];
-			c[i+newN][1] %= CirculantPolynomial.P;
-			c[i] = CirculantPolynomial.multiplication(c[i], sqrt);
+			tmp[0] = b[lb+i][0];
+			tmp[1] = b[lb+i][1];
+			b[lb+i][0] += b[lb+i+newN][0];
+			b[lb+i][1] += b[lb+i+newN][1];
+			b[lb+i][0] %= CirculantPolynomial.P;
+			b[lb+i][1] %= CirculantPolynomial.P;
+			b[lb+i+newN][0] = tmp[0] - b[lb+i+newN][0];
+			b[lb+i+newN][1] = tmp[1] - b[lb+i+newN][1];
+			b[lb+i+newN][0] %= CirculantPolynomial.P;
+			b[lb+i+newN][1] %= CirculantPolynomial.P;
+			b[lb+i] = CirculantPolynomial.multiplication(b[lb+i], sqrt);
 		}
-		
-		return c;
 	}
 	
-	private long[][] multNaiv(long[][] a, long[][] b, int D, int N) {
-		long[][] c = new long[N][2];
-		int count = 0;
+	private void multNaiv(long[][] a, long[][] b, int D, int N, int la, int lb) {
+		long[][] c = this.cache;
 		long[] sqrt = ROOTS[D];
 		for(int i=0;i<N;i++) {
+			c[i][0] = 0L;
+			c[i][1] = 0L;
 			long[] tmp = null;
-			for(int j=0;j<N-count;j++) {
-				tmp = CirculantPolynomial.multiplication(a[j], b[j+count]);
+			for(int j=0;j<N-i;j++) {
+				tmp = CirculantPolynomial.multiplication(a[la+j], b[lb+j+i]);
 				c[i][0] += tmp[0];
 				c[i][1] += tmp[1];
 			}
@@ -106,8 +154,8 @@ public class CirculantPolynomial {
 			c[i][1] %= CirculantPolynomial.P;
 			tmp[0] = 0L;
 			tmp[1] = 0L;
-			for(int j=N-count;j<N;j++) {
-				long[] tmp2 = CirculantPolynomial.multiplication(a[j], b[j-N+count]);
+			for(int j=N-i;j<N;j++) {
+				long[] tmp2 = CirculantPolynomial.multiplication(a[la+j], b[lb+j-N+i]);
 				tmp[0] += tmp2[0];
 				tmp[1] += tmp2[1];
 			}
@@ -116,14 +164,23 @@ public class CirculantPolynomial {
 			tmp = CirculantPolynomial.multiplication(tmp, sqrt);
 			c[i][0] = (c[i][0] + tmp[0]) % CirculantPolynomial.P;
 			c[i][1] = (c[i][1] + tmp[1]) % CirculantPolynomial.P;
-			count++;
 		}
-		return c;
+		for(int i=0;i<N;i++) {
+			b[lb+i][0] = c[i][0];
+			b[lb+i][1] = c[i][1];
+		}
 	}
 	
 	private void computeRoots(long[] omega, int N, int d) {
-		long[][] tmpRoots = new long[d][2];
 		long[] currOmega = omega;
+		if(N == 0) {
+			ROOTS = new long[1][2];
+			INVERSEROOTS = new long[1][2];
+			ROOTS[0] = currOmega;
+			INVERSEROOTS[0] = currOmega;
+			return;
+		}
+		long[][] tmpRoots = new long[d][2];
 		for(int i=0;i<d;i++) {
 			tmpRoots[d-i-1] = currOmega;
 			currOmega = CirculantPolynomial.square(currOmega);
@@ -169,9 +226,7 @@ public class CirculantPolynomial {
 		}
 		highestBit--;
 		int checkBit = 1 << highestBit;
-		long[] result = new long[2];
-		result[0] = a[0];
-		result[1] = a[1];
+		long[] result = a;
 		while(checkBit > 0) {
 			result = CirculantPolynomial.square(result);
 			if((n & checkBit) == checkBit) {
